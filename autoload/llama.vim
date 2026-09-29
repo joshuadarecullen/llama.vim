@@ -1828,6 +1828,11 @@ function! llama#inst_send(req_id, messages)
 
     let l:req = s:inst_reqs[a:req_id]
 
+    " the result is complete when the job has exited and all of its output has been
+    " delivered. vim reports the two separately and in either order
+    let l:req.job_exited = v:false
+    let l:req.job_closed = s:ghost_text_nvim ? v:true : v:false
+
     if s:ghost_text_nvim
         let l:req.job = jobstart(l:curl_command, {
             \ 'on_stdout': function('s:inst_on_response', [a:req_id]),
@@ -1838,8 +1843,9 @@ function! llama#inst_send(req_id, messages)
         call chanclose(l:req.job, 'stdin')
     elseif s:ghost_text_vim
         let l:req.job = job_start(l:curl_command, {
-            \ 'out_cb':  function('s:inst_on_response', [a:req_id]),
-            \ 'exit_cb': function('s:inst_on_exit',     [a:req_id])
+            \ 'out_cb':   function('s:inst_on_response', [a:req_id]),
+            \ 'exit_cb':  function('s:inst_on_exit',     [a:req_id]),
+            \ 'close_cb': function('s:inst_on_close',    [a:req_id])
             \ })
 
         let channel = job_getchannel(l:req.job)
@@ -2042,10 +2048,32 @@ function! s:inst_on_exit(id, job_id, exit_code, event = v:null)
         return
     endif
 
+    let s:inst_reqs[a:id].job_exited = v:true
+    call s:inst_finish(a:id)
+endfunction
+
+" vim only. the channel closes once the last of the output has been handed to
+" s:inst_on_response, which can be after exit_cb has run. marking the request ready
+" on exit alone let that late output put it back to 'gen', where it stayed
+function! s:inst_on_close(id, channel)
+    if !has_key(s:inst_reqs, a:id)
+        return
+    endif
+
+    let s:inst_reqs[a:id].job_closed = v:true
+    call s:inst_finish(a:id)
+endfunction
+
+function! s:inst_finish(id)
+    let l:req = s:inst_reqs[a:id]
+
+    if !l:req.job_exited || !l:req.job_closed
+        return
+    endif
+
     call s:inst_update(a:id, 'ready')
 
     " add assistant response to messages for continuation
-    let l:req = s:inst_reqs[a:id]
     call add(l:req.inst_prev, {'role': 'assistant', 'content': l:req.result})
 endfunction
 
