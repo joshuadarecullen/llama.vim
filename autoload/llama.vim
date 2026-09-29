@@ -1492,14 +1492,29 @@ function! s:fim_render(pos_x, pos_y, responses, selected)
     "       swallowed while insert-mode completion is active and the rest of the mapping
     "       ends up being inserted as text
     " ref: https://github.com/ggml-org/llama.vim/issues/38
-    if g:llama_config.keymap_fim_accept_full != ''
-        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_full . ' <C-\><C-O>:call llama#fim_accept(''full'')<CR>'
-    endif
-    if g:llama_config.keymap_fim_accept_line != ''
-        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_line . ' <C-\><C-O>:call llama#fim_accept(''line'')<CR>'
-    endif
-    if g:llama_config.keymap_fim_accept_word != ''
-        exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_word . ' <C-\><C-O>:call llama#fim_accept(''word'')<CR>'
+    " note: only when there is something to accept - otherwise the keys do nothing, and hide
+    "       the user's own mappings for them (e.g. <Tab> of a completion plugin)
+    if l:can_accept
+        if g:llama_config.keymap_fim_accept_full != ''
+            exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_full . ' <C-\><C-O>:call llama#fim_accept(''full'')<CR>'
+        endif
+        if g:llama_config.keymap_fim_accept_line != ''
+            exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_line . ' <C-\><C-O>:call llama#fim_accept(''line'')<CR>'
+        endif
+        if g:llama_config.keymap_fim_accept_word != ''
+            exe 'inoremap <buffer> ' . g:llama_config.keymap_fim_accept_word . ' <C-\><C-O>:call llama#fim_accept(''word'')<CR>'
+        endif
+    else
+        " cycling re-renders without hiding first, so drop the keys of the previous suggestion
+        if g:llama_config.keymap_fim_accept_full != ''
+            exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_fim_accept_full
+        endif
+        if g:llama_config.keymap_fim_accept_line != ''
+            exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_fim_accept_line
+        endif
+        if g:llama_config.keymap_fim_accept_word != ''
+            exe 'silent! iunmap <buffer> ' . g:llama_config.keymap_fim_accept_word
+        endif
     endif
 
     " setup cycle shortcuts (always, so the configured keys are consumed)
